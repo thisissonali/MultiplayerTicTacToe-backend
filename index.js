@@ -5,11 +5,11 @@ const cors = require('cors');
 
 const PORT = 8000;
 const app = express();
+
 let users = 0;
-const grid = Array(9).fill("");
 let data = {};
-let winner = '';
-let Xchance = true;
+let connectedSocketIds = [];
+
 app.use(cors({
   origin: "http://localhost:5173"
 }));
@@ -65,27 +65,29 @@ const gotWinner = (index, updatedGrid) => {
     }
 };
 const clickHandler = (index) => {
-    if (grid[index] || winner) {
-        if (grid[index]) console.log(grid[index]);
-        if(winner) console.log(winner);
+   
+    if (data["room1"].gridVal[index] || data["room1"].winner) {
+        if (data["room1"].gridVal[index]) console.log(data["room1"].gridVal[index]);
+        if(data["room1"].winner) console.log(data["room1"].winner);
         console.log("bruh");
         return;
     }
          
-    let inputValue = Xchance ? "X" : "0";
+    let inputValue = data["room1"].chance ? "X" : "0";
          
-    const updatedGrid = grid.map((cell, idx) => {
+    const updatedGrid = data["room1"].gridVal.map((cell, idx) => {
     if (idx === index) {
-       data["room1"][idx] = inputValue;
+       data["room1"].gridVal[idx] = inputValue;
        return inputValue;
     }
     return cell;
     });
     console.log("updatedGrid: " + updatedGrid);
     console.log(data["room1"]);
-    Xchance = !Xchance;
+    data["room1"].chance = !data["room1"].chance;
     const tempWinner = gotWinner(index, updatedGrid);
-    winner = tempWinner;
+    data["room1"].winner = tempWinner;
+    console.log("winner: " + data["room1"].winner);
 };
 
 io.on("connection",  (socket) => {
@@ -95,22 +97,43 @@ io.on("connection",  (socket) => {
     socket.emit("temp", message);
     
     if (users <= 2) {
-     socket.join("room1");
+      socket.join("room1");
+      connectedSocketIds.push(socket.id);
     }
-    data["room1"] = grid;  //now in data object room1 is the key and empty grid is its value
-   //  console.log(data.room1);
+    data["room1"] = {gridVal:  Array(9).fill("") , chance: true , connecIdsArr: connectedSocketIds , winner: ''};  //now in data object room1 is the key and empty grid is its value
+    io.to("room1").emit("connected-sockets", data["room1"].connecIdsArr);
+    console.log(data["room1"]);
    
    socket.on("click-event", (index) => { 
      console.log("hey"); 
      console.log(index);  
-     clickHandler(index);
+      if (data["room1"].chance && socket.id === data["room1"].connecIdsArr[0]) {
+       // X has chance
+        clickHandler(index);
+     }
+     else if (!data["room1"].chance && socket.id === data["room1"].connecIdsArr[1]) {
+       //0 has chance
+       clickHandler(index);
+     }
      io.to("room1").emit("room-event", "working");       
-     io.to("room1").emit('grid-manip', data["room1"]);
-     io.to("room1").emit("chance-event", Xchance);
-     io.to("room1").emit("winner-event", winner);
+     io.to("room1").emit('grid-manip', data["room1"].gridVal);
+     io.to("room1").emit("chance-event", data["room1"].chance);
+     io.to("room1").emit("winner-event", data["room1"].winner);
+     
     })
-    
+  //   socket.on("disconnect", () => {
+  //   users--;
+  //   data["room1"].connecIdsArr = data["room1"].connecIdsArr.filter(id => id !== socket.id);
+  //   io.emit("connected-sockets", data["room1"].connecIdsArr);
+  //   if (data["room1"].connecIdsArr.length === 0) {
+  //     // Reset game state if both players leave
+  //     data["room1"].gridVal.fill("");
+  //     data["room1"].winner = '';
+  //     data["room1"].chance = true;
+  //   }
+  // });
 });
+
 
 //http
 app.get('/', (req, res) => { 
