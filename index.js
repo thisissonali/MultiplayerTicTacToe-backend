@@ -64,14 +64,12 @@ const gotWinner = (index, updatedGrid) => {
       }
     }
 };
+
 const clickHandler = (index) => {
-   
-    if (data["room1"].gridVal[index] || data["room1"].winner) {
+   if (data["room1"].gridVal[index] || data["room1"].winner) {
         return;
     }
-         
     let inputValue = data["room1"].chance ? "X" : "0";
-         
     const updatedGrid = data["room1"].gridVal.map((cell, idx) => {
     if (idx === index) {
        data["room1"].gridVal[idx] = inputValue;
@@ -91,10 +89,10 @@ io.on("connection",  (socket) => {
       socket.join("room1");
       connectedSocketIds.push(socket.id);
     }
-    data["room1"] = {gridVal:  Array(9).fill("") , chance: true , connecIdsArr: connectedSocketIds , winner: ''};  //now in data object room1 is the key and empty grid is its value
-    io.to("room1").emit("connected-sockets", data["room1"].connecIdsArr);
+    data["room1"] = {gridVal:  Array(9).fill("") , chance: true , connecIdsArr: connectedSocketIds , winner: ''}; 
+    io.to("room1").emit("data", data);
    
-   socket.on("click-event", (index) => { 
+  socket.on("click-event", (index) => { 
       if (data["room1"].chance && socket.id === data["room1"].connecIdsArr[0]) {
        // X has chance
         clickHandler(index);
@@ -103,15 +101,11 @@ io.on("connection",  (socket) => {
        //0 has chance
        clickHandler(index);
      }  
-     io.to("room1").emit('grid-manip', data["room1"].gridVal);
-     io.to("room1").emit("chance-event", data["room1"].chance);
-     io.to("room1").emit("winner-event", data["room1"].winner);
-     
-    })
+     io.to("room1").emit("data", data);
+  })
+  
 });
 
-
-//http
 app.get('/', (req, res) => { 
     res.send("Working....")
 })
