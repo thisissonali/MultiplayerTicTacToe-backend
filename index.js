@@ -12,7 +12,7 @@ let data = {};
 let connectedSocketIds = [];
 
 app.use(cors({
-  origin: "http://localhost:5173"
+  origin: "*"
 }));
 app.use(express.static('dist'));
 
@@ -20,7 +20,7 @@ const server = http.createServer(app);
 
 const io = new Server(server, {
   cors: {
-    origin: "http://localhost:5173"
+    origin: "*"
 }
 });
 
