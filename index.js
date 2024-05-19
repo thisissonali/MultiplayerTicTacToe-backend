@@ -2,6 +2,7 @@ const http = require('http');
 const express = require('express');
 const { Server } = require('socket.io');
 const cors = require('cors');
+const path = require('path');
 
 const PORT = 8000;
 const app = express();
@@ -13,6 +14,8 @@ let connectedSocketIds = [];
 app.use(cors({
   origin: "http://localhost:5173"
 }));
+app.use(express.static('dist'));
+
 const server = http.createServer(app);
 
 const io = new Server(server, {
@@ -105,10 +108,9 @@ io.on("connection",  (socket) => {
   })
   
 });
-
-app.get('/', (req, res) => { 
-    res.send("Working....")
-})
+app.get('/', async (req , res) => {
+  res.sendFile(path.resolve(__dirname,  "dist", "index.html"));
+});
 server.listen(PORT, () => {
     console.log(`Server listening on ${PORT}`);
 })
