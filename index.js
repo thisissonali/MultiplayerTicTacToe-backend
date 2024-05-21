@@ -3,6 +3,7 @@ const express = require('express');
 const { Server } = require('socket.io');
 const cors = require('cors');
 const path = require('path');
+const uuid4 = require('uuid4');
 
 const PORT = process.env.PORT || 8000;
 const app = express();
@@ -10,7 +11,7 @@ const app = express();
 let users = 0;
 let data = {};
 let connectedSocketIds = [];
-
+let newRoom;
 app.use(cors({
   origin: "*"
 }));
@@ -39,6 +40,7 @@ const gotWinner = (index, updatedGrid) => {
       updatedGrid[row * 3 + 1] === updatedGrid[row * 3 + 2] &&
       updatedGrid[row * 3] !== ""
     ) {
+      users = users - 2;
       return updatedGrid[row * 3];
     }
     if (
@@ -46,6 +48,7 @@ const gotWinner = (index, updatedGrid) => {
       updatedGrid[col + 3] === updatedGrid[col + 6] &&
       updatedGrid[col] !== ""
     ) {
+      users = users - 2;
       return updatedGrid[col];
     }
     if (diagnoal1) {
@@ -54,6 +57,7 @@ const gotWinner = (index, updatedGrid) => {
         updatedGrid[4] === updatedGrid[8] &&
         updatedGrid[0] !== ""
       ) {
+        users = users - 2;
         return updatedGrid[0];
       }
     }
@@ -63,50 +67,67 @@ const gotWinner = (index, updatedGrid) => {
         updatedGrid[4] === updatedGrid[6] &&
         updatedGrid[2] !== ""
       ) {
+        users = users - 2;
         return updatedGrid[2];
       }
     }
 };
 
 const clickHandler = (index) => {
-   if (data["room1"].gridVal[index] || data["room1"].winner) {
+   if (data[newRoom].gridVal[index] || data[newRoom].winner) {
         return;
     }
-    let inputValue = data["room1"].chance ? "X" : "0";
-    const updatedGrid = data["room1"].gridVal.map((cell, idx) => {
+    let inputValue = data[newRoom].chance ? "X" : "0";
+    const updatedGrid = data[newRoom].gridVal.map((cell, idx) => {
     if (idx === index) {
-       data["room1"].gridVal[idx] = inputValue;
+       data[newRoom].gridVal[idx] = inputValue;
        return inputValue;
     }
     return cell;
     });
-    data["room1"].chance = !data["room1"].chance;
+    data[newRoom].chance = !data[newRoom].chance;
     const tempWinner = gotWinner(index, updatedGrid);
-    data["room1"].winner = tempWinner;
+    data[newRoom].winner = tempWinner;
 };
 
-io.on("connection",  (socket) => {
+io.on("connection", (socket) => {
+  if (users === 0) connectedSocketIds.splice(0, connectedSocketIds.length);
     users++;
-    
-    if (users <= 2) {
-      socket.join("room1");
+    if (users % 2 !== 0) {
+      //odd number of users
+      newRoom = uuid4();
+      socket.join(newRoom);
       connectedSocketIds.push(socket.id);
+    } else {
+      connectedSocketIds.push(socket.id);
+      socket.join(newRoom);
+      users = users - 2;
+      data[newRoom] = {gridVal:  Array(9).fill("") , chance: true , connecIdsArr: connectedSocketIds , winner: ''}; 
     }
-    data["room1"] = {gridVal:  Array(9).fill("") , chance: true , connecIdsArr: connectedSocketIds , winner: ''}; 
-    io.to("room1").emit("data", data);
+    data[newRoom] = {gridVal:  Array(9).fill("") , chance: true , connecIdsArr: connectedSocketIds , winner: ''}; 
+    io.to(newRoom).emit("data", data, newRoom);
    
   socket.on("click-event", (index) => { 
-      if (data["room1"].chance && socket.id === data["room1"].connecIdsArr[0]) {
+      if (data[newRoom].chance && socket.id === data[newRoom].connecIdsArr[0]) {
        // X has chance
         clickHandler(index);
      }
-     else if (!data["room1"].chance && socket.id === data["room1"].connecIdsArr[1]) {
+     else if (!data[newRoom].chance && socket.id === data[newRoom].connecIdsArr[1]) {
        //0 has chance
        clickHandler(index);
-     }  
-     io.to("room1").emit("data", data);
+    }  
+     io.to(newRoom).emit("data", data, newRoom);
   })
-  
+   socket.on("disconnect", () => {
+    users--;
+    data[newRoom].connecIdsArr = data[newRoom].connecIdsArr.filter(id => id !== socket.id);
+    if (data[newRoom].connecIdsArr.length === 0) {
+      // Reset game state if both players leave
+      data[newRoom].gridVal.fill("");
+      data[newRoom].winner = '';
+      data[newRoom].chance = true;
+    }
+  });
 });
 app.get('/', async (req , res) => {
   res.sendFile(path.resolve(__dirname,  "dist", "index.html"));
