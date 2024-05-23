@@ -10,7 +10,6 @@ const app = express();
 
 let data = {}; // will have room to user mapping
 let users = {}; // will have user to room mapping
-let connectedSocketIds = [];
 let newRoom;
 let userQueue = [];
 
@@ -72,8 +71,7 @@ const gotWinner = (index, updatedGrid) => {
 };
 
 const clickHandler = (index, newRoom) => {
-  console.log(newRoom);
-  console.log(data[newRoom]);
+
    if (data[newRoom].gridVal[index] || data[newRoom].winner) {
         return;
     }
@@ -89,51 +87,38 @@ const clickHandler = (index, newRoom) => {
     const tempWinner = gotWinner(index, updatedGrid);
     data[newRoom].winner = tempWinner;
 };
+const matchHandler = (socket) => {
+   userQueue.push(socket);
+     if (userQueue.length >= 2) {
 
-io.on("connection", (socket) => {
-     userQueue.push(socket);
-    console.log(userQueue.length); 
-    if (userQueue.length >= 2) {
       const socket1 = userQueue.shift();
       const socket2 = userQueue.shift();
-      console.log("hey");
+      
       newRoom = uuid4();
       socket1.join(newRoom);
       socket2.join(newRoom);
       users[socket1.id] = newRoom;
       users[socket2.id] = newRoom;
 
-      connectedSocketIds.push(socket1.id);
-      connectedSocketIds.push(socket2.id);
-      data[newRoom] = { gridVal: Array(9).fill(""), chance: true, connecIdsArr: connectedSocketIds, winner: '' }; 
-      console.log(connectedSocketIds);
+      data[newRoom] = { gridVal: Array(9).fill(""), chance: true, connecIdsArr: [socket1.id , socket2.id], winner: '' }; 
       io.to(users[socket.id]).emit("data", data, users[socket.id]);
-    } else {
-      connectedSocketIds = [];
-      console.log(connectedSocketIds);
     }
+}
+io.on("connection", (socket) => {
+  matchHandler(socket);
    
   socket.on("click-event", (index) => {
-    console.log(data[users[socket.id]].chance);
-    console.log(data[users[socket.id]]);
-    console.log(socket.id);
-    console.log(data[users[socket.id]].connecIdsArr[0]);
     if (data[users[socket.id]].chance && socket.id === data[users[socket.id]].connecIdsArr[0]) {
       // X has chance
-      console.log('x clickhandler worked');
-      console.log(users);
-      console.log(users[socket.id]);
       clickHandler(index, users[socket.id]);
     }
     else if (!data[users[socket.id]].chance && socket.id === data[users[socket.id]].connecIdsArr[1]) {
       //0 has chance
-      console.log('0 clickhandler worked');
-      console.log(users);
-      console.log(users[socket.id]);
       clickHandler(index, users[socket.id]);
     }
     io.to(users[socket.id]).emit("data", data, users[socket.id]);
   });
+  
   socket.on("request-new-room", (userId) => {
     const currentRoom = users[userId];
     const newRoom = uuid4();
@@ -156,17 +141,26 @@ io.on("connection", (socket) => {
 
     io.to(newRoom).emit("new-room", data[newRoom]);
   });
-    socket.on("disconnect", () => {
-    const room = users[socket.id];
-    if (room && data[room]) {
-      data[room].connecIdsArr = data[room].connecIdsArr.filter(id => id !== socket.id);
-
-      if (data[room].connecIdsArr.length === 0) {
-        delete data[room];
+    socket.on("disconnect", async () => {
+      const socket1 = socket.id;
+      const currentRoom = users[socket.id];
+      const socket2 = await io.in(currentRoom).fetchSockets();
+      if (socket2 > 0) {
+        userQueue.push(socket2[0]);
       }
-    }
+      if (data[currentRoom]) {
+       
+        data[currentRoom] = { gridVal: Array(9).fill(""), chance: true, connecIdsArr: [], winner: '' };
+        io.to(currentRoom).emit("data", data, currentRoom);
+        delete data[currentRoom];
+        delete users[socket1];
+        delete users[socket2];
+          
+        }
+      
   });
 });
+
 app.get('/', async (req , res) => {
   res.sendFile(path.resolve(__dirname,  "dist", "index.html"));
 });
