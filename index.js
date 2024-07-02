@@ -130,14 +130,11 @@ io.on("connection", (socket) => {
 
   socket.on("request-new-room", async () => {
     const socket1 = socket;
+    const room = users[socket1.id];
+    socket1.leave(room);
     userQueue.push(socket1);
     if (userQueue.length === 1) {
-      data[users[socket1.id]] = {
-        gridVal: Array(9).fill(""),
-        chance: true,
-        connecIdsArr: [socket1.id],
-        winner: "",
-      };
+      data[users[socket1.id]] = null;
       io.to(socket1.id).emit("data", data, users[socket1.id]);
     }
     if (userQueue.length == 2) {
@@ -149,21 +146,21 @@ io.on("connection", (socket) => {
   socket.on("disconnect", async () => {
     const socket1 = socket.id;
     const currentRoom = users[socket.id];
-    const socket2 = await io.in(currentRoom).fetchSockets();
-
-    // Remove the socket from the userQueue
     userQueue = userQueue.filter((s) => s.id !== socket1);
 
-    if (socket2.length > 0) {
-      userQueue.push(socket2[0]);
-    }
+    if (currentRoom) {
+      const socket2 = await io.in(currentRoom).fetchSockets();
+      if (socket2.length > 0) {
+        userQueue.push(socket2[0]);
+      }
 
-    if (data[currentRoom]) {
-      data[currentRoom] = null;
-      io.to(currentRoom).emit("data", data, currentRoom);
-      delete data[currentRoom];
-      delete users[socket1];
-      delete users[socket2[0].id];
+      if (data[currentRoom] !== null) {
+        data[currentRoom] = null;
+        io.to(currentRoom).emit("data", data, currentRoom);
+        delete data[currentRoom];
+        delete users[socket1];
+        delete users[socket2[0].id];
+      }
     }
   });
 });
